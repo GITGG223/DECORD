@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sign In</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="center-card">
+    <div class="card">
+      <a class="link" href="index.html">← Back</a>
+      <h2>Welcome back</h2>
+      <p class="muted">Sign in to continue.</p>
+
+      <form id="loginForm" class="form">
+        <input id="li-username" placeholder="Username" autocomplete="off" required />
+        <input id="li-password" type="password" placeholder="Password" required />
+        <div class="row" style="justify-content:flex-end">
+          <button type="submit" class="btn">Sign In</button>
+        </div>
+      </form>
+
+      <p class="small">New here? <a class="link" href="signup.html">Create account</a></p>
+    </div>
+  </main>
+
+  <script src="auth.js"></script>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('li-username').value.trim();
+      const password = document.getElementById('li-password').value;
+      if (!username || !password) return alert('Fill all fields');
+      const res = await api('/api/login', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ username, password })
+      });
+      if (res.ok) {
+        sessionStorage.setItem('md_currentUser', username);
+        alert('Signed in');
+        location.href = 'dashboard.html';
+      } else {
+        alert(res.error || 'Invalid credentials');
+      }
+    });
+  </script>
+</body>
+</html>

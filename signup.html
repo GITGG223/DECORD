@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sign Up</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="center-card">
+    <div class="card">
+      <a class="link" href="index.html">← Back</a>
+      <h2>Create account</h2>
+      <p class="muted">Create an account to chat with friends.</p>
+
+      <form id="signupForm" class="form">
+        <input id="su-username" placeholder="Username" autocomplete="off" required />
+        <input id="su-password" type="password" placeholder="Password" required />
+        <div class="row" style="justify-content:flex-end">
+          <button type="submit" class="btn">Create Account</button>
+        </div>
+      </form>
+
+      <p class="small">Already have an account? <a class="link" href="login.html">Sign in</a></p>
+    </div>
+  </main>
+
+  <script src="auth.js"></script>
+  <script>
+    document.getElementById('signupForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('su-username').value.trim();
+      const password = document.getElementById('su-password').value;
+      if (!username || !password) return alert('Fill all fields');
+      const res = await api('/api/signup', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ username, password })
+      });
+      if (res.ok) {
+        sessionStorage.setItem('md_currentUser', username);
+        alert('Account created');
+        location.href = 'dashboard.html';
+      } else {
+        alert(res.error || 'Signup failed');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Mini Demo</div>
+    <div class="top-actions">
+      <div class="search-wrap">
+        <input id="userSearch" placeholder="Search users..." />
+        <div id="searchResults" class="search-results hidden"></div>
+      </div>
+      <button id="logoutBtn" class="btn-ghost">Log out</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <aside class="sidebar">
+      <div class="user-card">
+        <div class="avatar" id="avatar">U</div>
+        <div>
+          <div id="userName" class="user-name">User</div>
+          <div class="muted">Member</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Requests</div>
+        <div id="requestsList" class="requests-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Contacts</div>
+        <div id="contactsList" class="channels"></div>
+      </div>
+    </aside>
+
+    <section class="chat-area">
+      <div class="chat-header" id="chatHeader">Select a contact to chat</div>
+      <div class="messages" id="messages">
+        <div class="msg system">No conversation selected.</div>
+      </div>
+
+      <form id="msgForm" class="msg-form hidden">
+        <input id="msgInput" placeholder="Message" autocomplete="off">
+        <button class="btn" type="submit">Send</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="auth.js"></script>
+  <script>
+    const current = sessionStorage.getItem('md_currentUser');
+    if (!current) location.href = 'index.html';
+    document.getElementById('userName').textContent = current;
+    document.getElementById('avatar').textContent = current.charAt(0).toUpperCase();
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      sessionStorage.removeItem('md_currentUser');
+      location.href = 'index.html';
+    });
+
+    const searchInput = document.getElementById('userSearch');
+    const searchResults = document.getElementById('searchResults');
+
+    searchInput.addEventListener('input', async () => {
+      const q = searchInput.value.trim();
+      if (!q) { searchResults.classList.add('hidden'); searchResults.innerHTML = ''; return; }
+      const matches = await apiSearch(q);
+      const filtered = matches.filter(u => u !== current);
+      searchResults.classList.remove('hidden');
+      if (!filtered.length) { searchResults.innerHTML = '<div class="sr-empty">No users</div>'; return; }
+      searchResults.innerHTML = filtered.map(u => `
+        <div class="sr-item"><div class="sr-name">${u}</div><button class="sr-btn" data-user="${u}">Req</button></div>`).join('');
+      document.querySelectorAll('.sr-btn').forEach(b => b.addEventListener('click', async (ev) => {
+        const to = ev.currentTarget.dataset.user;
+        const r = await apiSendRequest(current, to);
+        alert(r.ok ? 'Request sent' : (r.error || 'Error'));
+      }));
+    });
+
+    async function fetchRequests(){
+      const res = await fetch('/api/requests?user=' + encodeURIComponent(current)).then(r => r.json());
+      const list = document.getElementById('requestsList');
+      if (!res || !res.length) { list.innerHTML = '<div class="sr-empty">No requests</div>'; return; }
+      list.innerHTML = res.map(from => `
+        <div class="req-item"><div>${from}</div>
+          <div class="req-actions">
+            <button class="req-accept" data-user="${from}">Accept</button>
+            <button class="req-decline" data-user="${from}">Decline</button>
+          </div>
+        </div>`).join('');
+      document.querySelectorAll('.req-accept').forEach(b => b.addEventListener('click', async (e) => {
+        const from = e.currentTarget.dataset.user;
+        await apiAccept(current, from);
+        alert('Accepted');
+        await fetchRequests(); await fetchContacts();
+      }));
+      document.querySelectorAll('.req-decline').forEach(b => b.addEventListener('click', async (e) => {
+        const from = e.currentTarget.dataset.user;
+        await fetch('/api/decline', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ me: current, from }) }).then(r => r.json());
+        alert('Declined');
+        await fetchRequests();
+      }));
+    }
+
+    async function fetchContacts(){
+      const res = await fetch('/api/contacts?user=' + encodeURIComponent(current)).then(r => r.json());
+      const list = document.getElementById('contactsList');
+      if (!res || !res.length) { list.innerHTML = '<div class="sr-empty">No contacts yet</div>'; return; }
+      list.innerHTML = res.map(c => `<div class="channel contact-item" data-user="${c}">${c}</div>`).join('');
+      document.querySelectorAll('.contact-item').forEach(el => el.addEventListener('click', openChat));
+    }
+
+    let activeContact = null;
+    async function openChat(e){
+      const other = e.currentTarget ? e.currentTarget.dataset.user : e;
+      activeContact = other;
+      document.getElementById('chatHeader').textContent = '# ' + other;
+      document.getElementById('msgForm').classList.remove('hidden');
+      await loadMessages();
+    }
+
+    async function loadMessages(){
+      if (!activeContact) return;
+      const msgs = await apiGetMessages(current, activeContact);
+      const messagesEl = document.getElementById('messages');
+      if (!msgs.length) messagesEl.innerHTML = '<div class="msg system">No messages yet. Say hi!</div>';
+      else messagesEl.innerHTML = msgs.map(m => {
+        const cls = m.from === current ? 'msg me' : 'msg';
+        return `<div class="${cls}"><div class="meta">${m.from} <span class="time">${new Date(m.ts).toLocaleTimeString()}</span></div><div class="text">${escapeHtml(m.text)}</div></div>`;
+      }).join('');
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    document.getElementById('msgForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = document.getElementById('msgInput').value.trim();
+      if (!text || !activeContact) return;
+      await apiSendMessage(current, activeContact, text);
+      document.getElementById('msgInput').value = '';
+      await loadMessages();
+    });
+
+    fetchRequests(); fetchContacts();
+    setInterval(() => { fetchRequests(); fetchContacts(); if (activeContact) loadMessages(); }, 2500);
+
+    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  </script>
+</body>
+</html>
